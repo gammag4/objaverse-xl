@@ -34,7 +34,8 @@ sudo apt-get install xserver-xorg -y && \
 cd ../.. && \
   pip install -r requirements.txt && \
   pip install -e . && \
-  cd scripts/rendering
+  cd scripts/rendering && \
+  pip install -r requirements.txt
 ```
 
 ## 📸 Usage
