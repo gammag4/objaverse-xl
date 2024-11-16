@@ -876,6 +876,19 @@ if __name__ == "__main__":
     render.resolution_y = 512
     render.resolution_percentage = 100
 
+    # Set background color to white
+    bpy.context.scene.world.use_nodes = True
+    bg = bpy.context.scene.world.node_tree.nodes.get('Background')
+    if bg:
+        bg.inputs[0].default_value = (1.0, 1.0, 1.0, 1.0)
+    else:
+        bg = bpy.context.scene.world.node_tree.nodes.new(
+            type='ShaderNodeBackground')
+        bg.inputs[0].default_value = (1.0, 1.0, 1.0, 1.0)
+    world_output = bpy.context.scene.world.node_tree.nodes.get('World Output')
+    bpy.context.scene.world.node_tree.links.new(
+        bg.outputs[0], world_output.inputs[0])
+
     # Set cycles settings
     scene.cycles.device = "GPU"
     scene.cycles.samples = 128
