@@ -48,7 +48,7 @@ After setup, we can start to render objects using the `main.py` script:
 python3 main.py
 ```
 
-After running this, you should see 10 zip files located in `~/.objaverse/github/renders`. Each zip file corresponds to the rendering of a unique object, in this case from [our example 3D objects repo](https://github.com/mattdeitke/objaverse-xl-test-files):
+After running this, you should see 10 zip files located in `~/.objaverse/renders`. Each zip file corresponds to the rendering of a unique object, in this case from [our example 3D objects repo](https://github.com/mattdeitke/objaverse-xl-test-files):
 
 ```bash
 > ls ~/.objaverse/github/renders
