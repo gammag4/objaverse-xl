@@ -154,11 +154,11 @@ def handle_found_object(
         )
 
         # check that the renders were saved successfully
-        png_files = glob.glob(os.path.join(target_directory, "*.png"))
+        jpg_files = glob.glob(os.path.join(target_directory, "*.jpg"))
         metadata_files = glob.glob(os.path.join(target_directory, "*.json"))
         npy_files = glob.glob(os.path.join(target_directory, "*.npy"))
         if (
-            (len(png_files) != num_renders)
+            (len(jpg_files) != num_renders)
             or (len(npy_files) != num_renders)
             or (len(metadata_files) != 1)
         ):
@@ -400,6 +400,7 @@ def render_objects(
         processes = multiprocessing.cpu_count() * 3
 
     # get the objects to render
+    # TODO
     objects = get_example_objects()
     objects.iloc[0]["fileIdentifier"]
     objects = objects.copy()

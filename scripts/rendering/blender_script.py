@@ -6,6 +6,7 @@ import math
 import os
 import random
 import sys
+import mathutils
 from typing import Any, Callable, Dict, Generator, List, Literal, Optional, Set, Tuple
 
 import bpy
@@ -818,7 +819,7 @@ def render_object(
         )
 
         # render the image
-        render_path = os.path.join(output_dir, f"{i:03d}.png")
+        render_path = os.path.join(output_dir, f"{i:03d}.jpg")
         scene.render.filepath = render_path
         bpy.ops.render.render(write_still=True)
 
@@ -860,7 +861,7 @@ if __name__ == "__main__":
         default=12,
         help="Number of renders to save of the object.",
     )
-    argv = sys.argv[sys.argv.index("--") + 1 :]
+    argv = sys.argv[sys.argv.index("--") + 1:]
     args = parser.parse_args(argv)
 
     context = bpy.context
@@ -869,8 +870,8 @@ if __name__ == "__main__":
 
     # Set render settings
     render.engine = args.engine
-    render.image_settings.file_format = "PNG"
-    render.image_settings.color_mode = "RGBA"
+    render.image_settings.file_format = "JPEG"
+    render.image_settings.color_mode = "RGB"
     render.resolution_x = 512
     render.resolution_y = 512
     render.resolution_percentage = 100
@@ -884,7 +885,8 @@ if __name__ == "__main__":
     scene.cycles.transmission_bounces = 3
     scene.cycles.filter_width = 0.01
     scene.cycles.use_denoising = True
-    scene.render.film_transparent = True
+    scene.render.film_transparent = False
+
     bpy.context.preferences.addons["cycles"].preferences.get_devices()
     bpy.context.preferences.addons[
         "cycles"
