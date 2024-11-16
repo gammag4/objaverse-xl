@@ -51,7 +51,7 @@ python3 main.py
 After running this, you should see 10 zip files located in `~/.objaverse/renders`. Each zip file corresponds to the rendering of a unique object, in this case from [our example 3D objects repo](https://github.com/mattdeitke/objaverse-xl-test-files):
 
 ```bash
-> ls ~/.objaverse/github/renders
+> ls ~/.objaverse/renders
 0fde27a0-99f0-5029-8e20-be9b8ecabb59.zip  54f7478b-4983-5541-8cf7-1ab2e39a842e.zip  93499b75-3ee0-5069-8f4b-1bab60d2e6d6.zip
 21dd4d7b-b203-5d00-b325-0c041f43524e.zip  5babbc61-d4e1-5b5c-9b47-44994bbf958e.zip  ab30e24f-1046-5257-8806-2e346f4efebe.zip
 415ca2d5-9d87-568c-a5ff-73048a084229.zip  5f6d2547-3661-54d5-9895-bebc342c753d.zip
@@ -61,7 +61,7 @@ After running this, you should see 10 zip files located in `~/.objaverse/renders
 If we unzip one of the zip files:
 
 ```bash
-> cd ~/.objaverse/github/renders
+> cd ~/.objaverse/renders
 > unzip 0fde27a0-99f0-5029-8e20-be9b8ecabb59.zip
 ```
 
