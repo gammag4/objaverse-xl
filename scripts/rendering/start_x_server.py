@@ -43,7 +43,8 @@ def find_devices(excluded_device_ids):
     devices = []
     id_counter = 0
     for r in pci_records():
-        if r.get("Vendor", "") == "NVIDIA Corporation" and r["Class"] in [
+        # if r.get("Vendor", "") == "NVIDIA Corporation" and r["Class"] in [
+        if r["Class"] in [
             "VGA compatible controller",
             "3D controller",
         ]:
