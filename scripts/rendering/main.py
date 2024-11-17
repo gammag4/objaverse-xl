@@ -350,7 +350,7 @@ def render_objects(
     render_dir: str = "~/.objaverse",
     download_dir: Optional[str] = None,
     num_renders: int = 32,
-    sample_size: int = 1000,
+    sample_size: int = 10,
     processes: Optional[int] = None,
     save_repo_format: Optional[Literal["zip", "tar", "tar.gz", "files"]] = None,
     only_northern_hemisphere: bool = False,
