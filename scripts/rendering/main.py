@@ -340,8 +340,9 @@ def get_example_objects() -> pd.DataFrame:
 
 def get_samples(sample_size: int) -> pd.DataFrame:
     annotations = oxl.get_annotations(download_dir="~/.objaverse")
-    cc_by_annotations = annotations.loc[annotations['license'] == 'Creative Commons - Attribution'][['sha256', 'fileIdentifier', 'source', 'license']]
-    sampled_annotations = cc_by_annotations.sample(sample_size, random_state=42)
+    cc_by_annotations = annotations.loc[(annotations['license'] == 'Creative Commons - Attribution') & (annotations['source'] != 'thingiverse')]
+    filtered_annotations = cc_by_annotations[['sha256', 'fileIdentifier', 'source', 'license']]
+    sampled_annotations = filtered_annotations.sample(sample_size, random_state=42)
     return sampled_annotations
 
 
