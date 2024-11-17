@@ -338,10 +338,18 @@ def get_example_objects() -> pd.DataFrame:
     return pd.read_json("example-objects.json", orient="records")
 
 
+def get_samples(sample_size: int) -> pd.DataFrame:
+    annotations = oxl.get_annotations(download_dir="~/.objaverse")
+    cc_by_annotations = annotations.loc[annotations['license'] == 'Creative Commons - Attribution'][['sha256', 'fileIdentifier', 'source', 'license']]
+    sampled_annotations = cc_by_annotations.sample(sample_size, random_state=42)
+    return sampled_annotations
+
+
 def render_objects(
     render_dir: str = "~/.objaverse",
     download_dir: Optional[str] = None,
-    num_renders: int = 12,
+    num_renders: int = 32,
+    sample_size: int = 1000,
     processes: Optional[int] = None,
     save_repo_format: Optional[Literal["zip", "tar", "tar.gz", "files"]] = None,
     only_northern_hemisphere: bool = False,
@@ -400,8 +408,7 @@ def render_objects(
         processes = multiprocessing.cpu_count() * 3
 
     # get the objects to render
-    # TODO
-    objects = get_example_objects()
+    objects = get_samples(sample_size)
     objects.iloc[0]["fileIdentifier"]
     objects = objects.copy()
     logger.info(f"Provided {len(objects)} objects to render.")
