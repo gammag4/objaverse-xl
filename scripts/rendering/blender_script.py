@@ -28,22 +28,111 @@ IMPORT_FUNCTIONS: Dict[str, Callable] = {
 }
 
 
-def reset_cameras() -> None:
-    """Resets the cameras in the scene to a single default camera."""
-    # Delete all existing cameras
+def reset_scene_preload() -> None:
+    """Resets the scene to a clean state.
+
+    Returns:
+        None
+    """
+    
+    # Reset mode
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    # delete everything
+    for obj in bpy.data.objects:
+        bpy.data.objects.remove(obj, do_unlink=True)
+
+    # delete all the materials
+    for material in bpy.data.materials:
+        bpy.data.materials.remove(material, do_unlink=True)
+
+    # delete all the textures
+    for texture in bpy.data.textures:
+        bpy.data.textures.remove(texture, do_unlink=True)
+
+    # delete all the images
+    for image in bpy.data.images:
+        bpy.data.images.remove(image, do_unlink=True)
+
+
+def reset_scene_post_load() -> None:
+    """Resets loaded scene.
+
+    Deletes all hidden objects, lights and cameras.
+    """
+
     bpy.ops.object.select_all(action="DESELECT")
-    bpy.ops.object.select_by_type(type="CAMERA")
+    for obj in bpy.data.objects:
+        if obj.hide_viewport or obj.hide_render:
+            obj.hide_viewport = False
+            obj.hide_render = False
+            obj.hide_select = False
+            obj.select_set(True)
+        elif obj.type in ['LIGHT', 'CAMERA']:
+            obj.select_set(True)
     bpy.ops.object.delete()
 
-    # Create a new camera with default properties
+    # Delete invisible collections
+    invisible_collections = [col for col in bpy.data.collections if col.hide_viewport]
+    for col in invisible_collections:
+        bpy.data.collections.remove(col)
+
+
+def load_object(object_path: str) -> None:
+    """Loads a model with a supported file extension into the scene.
+
+    Args:
+        object_path (str): Path to the model file.
+
+    Raises:
+        ValueError: If the file extension is not supported.
+
+    Returns:
+        None
+    """
+    file_extension = object_path.split(".")[-1].lower()
+    if file_extension is None:
+        raise ValueError(f"Unsupported file type: {object_path}")
+
+    if file_extension == "usdz":
+        # install usdz io package
+        dirname = os.path.dirname(os.path.realpath(__file__))
+        usdz_package = os.path.join(dirname, "io_scene_usdz.zip")
+        bpy.ops.preferences.addon_install(filepath=usdz_package)
+        # enable it
+        addon_name = "io_scene_usdz"
+        bpy.ops.preferences.addon_enable(module=addon_name)
+        # import the usdz
+        from io_scene_usdz.import_usdz import import_usdz  # type: ignore
+
+        import_usdz(context, filepath=object_path,
+                    materials=True, animations=True)
+        return None
+
+    # load from existing import functions
+    import_function = IMPORT_FUNCTIONS[file_extension]
+
+    if file_extension == "blend":
+        import_function(directory=object_path, link=False)
+    elif file_extension in {"glb", "gltf"}:
+        import_function(filepath=object_path, merge_vertices=True)
+    else:
+        import_function(filepath=object_path)
+
+
+def create_default_camera() -> bpy.types.Object:
+    """Creates the default camera named "Camera".
+    
+    Returns:
+        camera: Default Camera
+    """
+
     bpy.ops.object.camera_add()
+    camera = context.active_object
+    camera.name = "Camera"
+    scene.camera = camera
 
-    # Rename the new camera to 'NewDefaultCamera'
-    new_camera = bpy.context.active_object
-    new_camera.name = "Camera"
-
-    # Set the new camera as the active camera for the scene
-    scene.camera = new_camera
+    return camera
 
 
 def sample_point_on_sphere(radius: float) -> Tuple[float, float, float]:
@@ -94,10 +183,10 @@ def _sample_spherical(
 
 
 def randomize_camera(
-    radius_min: float = 1.5,
-    radius_max: float = 2.2,
-    maxz: float = 2.2,
-    minz: float = -2.2,
+    radius_min: float = 1.6,
+    radius_max: float = 2.4,
+    maxz: float = 2.0,
+    minz: float = -0.8,
     only_northern_hemisphere: bool = False,
 ) -> bpy.types.Object:
     """Randomizes the camera location and rotation inside of a spherical shell.
@@ -116,21 +205,16 @@ def randomize_camera(
     Returns:
         bpy.types.Object: The camera object.
     """
+    
+    # Only positive z
+    minz = max(minz, 0) if only_northern_hemisphere else minz
 
     x, y, z = _sample_spherical(
         radius_min=radius_min, radius_max=radius_max, maxz=maxz, minz=minz
     )
     camera = bpy.data.objects["Camera"]
 
-    # only positive z
-    if only_northern_hemisphere:
-        z = abs(z)
-
     camera.location = Vector(np.array([x, y, z]))
-
-    direction = -camera.location
-    rot_quat = direction.to_track_quat("-Z", "Y")
-    camera.rotation_euler = rot_quat.to_euler()
 
     return camera
 
@@ -167,161 +251,15 @@ def _set_camera_at_size(i: int, scale: float = 1.5) -> bpy.types.Object:
     return camera
 
 
-def _create_light(
-    name: str,
-    light_type: Literal["POINT", "SUN", "SPOT", "AREA"],
-    location: Tuple[float, float, float],
-    rotation: Tuple[float, float, float],
-    energy: float,
-    use_shadow: bool = False,
-    specular_factor: float = 1.0,
-):
-    """Creates a light object.
+def get_scene_meshes() -> Generator[bpy.types.Object, None, None]:
+    """Returns all meshes in the scene.
 
-    Args:
-        name (str): Name of the light object.
-        light_type (Literal["POINT", "SUN", "SPOT", "AREA"]): Type of the light.
-        location (Tuple[float, float, float]): Location of the light.
-        rotation (Tuple[float, float, float]): Rotation of the light.
-        energy (float): Energy of the light.
-        use_shadow (bool, optional): Whether to use shadows. Defaults to False.
-        specular_factor (float, optional): Specular factor of the light. Defaults to 1.0.
-
-    Returns:
-        bpy.types.Object: The light object.
+    Yields:
+        Generator[bpy.types.Object, None, None]: Generator of all meshes in the scene.
     """
-
-    light_data = bpy.data.lights.new(name=name, type=light_type)
-    light_object = bpy.data.objects.new(name, light_data)
-    bpy.context.collection.objects.link(light_object)
-    light_object.location = location
-    light_object.rotation_euler = rotation
-    light_data.use_shadow = use_shadow
-    light_data.specular_factor = specular_factor
-    light_data.energy = energy
-    return light_object
-
-
-def randomize_lighting() -> Dict[str, bpy.types.Object]:
-    """Randomizes the lighting in the scene.
-
-    Returns:
-        Dict[str, bpy.types.Object]: Dictionary of the lights in the scene. The keys are
-            "key_light", "fill_light", "rim_light", and "bottom_light".
-    """
-
-    # Clear existing lights
-    bpy.ops.object.select_all(action="DESELECT")
-    bpy.ops.object.select_by_type(type="LIGHT")
-    bpy.ops.object.delete()
-
-    # Create key light
-    key_light = _create_light(
-        name="Key_Light",
-        light_type="SUN",
-        location=(0, 0, 0),
-        rotation=(0.785398, 0, -0.785398),
-        energy=random.choice([3, 4, 5]),
-    )
-
-    # Create fill light
-    fill_light = _create_light(
-        name="Fill_Light",
-        light_type="SUN",
-        location=(0, 0, 0),
-        rotation=(0.785398, 0, 2.35619),
-        energy=random.choice([2, 3, 4]),
-    )
-
-    # Create rim light
-    rim_light = _create_light(
-        name="Rim_Light",
-        light_type="SUN",
-        location=(0, 0, 0),
-        rotation=(-0.785398, 0, -3.92699),
-        energy=random.choice([3, 4, 5]),
-    )
-
-    # Create bottom light
-    bottom_light = _create_light(
-        name="Bottom_Light",
-        light_type="SUN",
-        location=(0, 0, 0),
-        rotation=(3.14159, 0, 0),
-        energy=random.choice([1, 2, 3]),
-    )
-
-    return dict(
-        key_light=key_light,
-        fill_light=fill_light,
-        rim_light=rim_light,
-        bottom_light=bottom_light,
-    )
-
-
-def reset_scene() -> None:
-    """Resets the scene to a clean state.
-
-    Returns:
-        None
-    """
-    # delete everything that isn't part of a camera or a light
-    for obj in bpy.data.objects:
-        if obj.type not in {"CAMERA", "LIGHT"}:
-            bpy.data.objects.remove(obj, do_unlink=True)
-
-    # delete all the materials
-    for material in bpy.data.materials:
-        bpy.data.materials.remove(material, do_unlink=True)
-
-    # delete all the textures
-    for texture in bpy.data.textures:
-        bpy.data.textures.remove(texture, do_unlink=True)
-
-    # delete all the images
-    for image in bpy.data.images:
-        bpy.data.images.remove(image, do_unlink=True)
-
-
-def load_object(object_path: str) -> None:
-    """Loads a model with a supported file extension into the scene.
-
-    Args:
-        object_path (str): Path to the model file.
-
-    Raises:
-        ValueError: If the file extension is not supported.
-
-    Returns:
-        None
-    """
-    file_extension = object_path.split(".")[-1].lower()
-    if file_extension is None:
-        raise ValueError(f"Unsupported file type: {object_path}")
-
-    if file_extension == "usdz":
-        # install usdz io package
-        dirname = os.path.dirname(os.path.realpath(__file__))
-        usdz_package = os.path.join(dirname, "io_scene_usdz.zip")
-        bpy.ops.preferences.addon_install(filepath=usdz_package)
-        # enable it
-        addon_name = "io_scene_usdz"
-        bpy.ops.preferences.addon_enable(module=addon_name)
-        # import the usdz
-        from io_scene_usdz.import_usdz import import_usdz
-
-        import_usdz(context, filepath=object_path, materials=True, animations=True)
-        return None
-
-    # load from existing import functions
-    import_function = IMPORT_FUNCTIONS[file_extension]
-
-    if file_extension == "blend":
-        import_function(directory=object_path, link=False)
-    elif file_extension in {"glb", "gltf"}:
-        import_function(filepath=object_path, merge_vertices=True)
-    else:
-        import_function(filepath=object_path)
+    for obj in bpy.context.scene.objects.values():
+        if isinstance(obj.data, (bpy.types.Mesh)):
+            yield obj
 
 
 def scene_bbox(
@@ -374,69 +312,7 @@ def get_scene_root_objects() -> Generator[bpy.types.Object, None, None]:
             yield obj
 
 
-def get_scene_meshes() -> Generator[bpy.types.Object, None, None]:
-    """Returns all meshes in the scene.
-
-    Yields:
-        Generator[bpy.types.Object, None, None]: Generator of all meshes in the scene.
-    """
-    for obj in bpy.context.scene.objects.values():
-        if isinstance(obj.data, (bpy.types.Mesh)):
-            yield obj
-
-
-def get_3x4_RT_matrix_from_blender(cam: bpy.types.Object) -> Matrix:
-    """Returns the 3x4 RT matrix from the given camera.
-
-    Taken from Zero123, which in turn was taken from
-    https://github.com/panmari/stanford-shapenet-renderer/blob/master/render_blender.py
-
-    Args:
-        cam (bpy.types.Object): The camera object.
-
-    Returns:
-        Matrix: The 3x4 RT matrix from the given camera.
-    """
-    # Use matrix_world instead to account for all constraints
-    location, rotation = cam.matrix_world.decompose()[0:2]
-    R_world2bcam = rotation.to_matrix().transposed()
-
-    # Use location from matrix_world to account for constraints:
-    T_world2bcam = -1 * R_world2bcam @ location
-
-    # put into 3x4 matrix
-    RT = Matrix(
-        (
-            R_world2bcam[0][:] + (T_world2bcam[0],),
-            R_world2bcam[1][:] + (T_world2bcam[1],),
-            R_world2bcam[2][:] + (T_world2bcam[2],),
-        )
-    )
-    return RT
-
-
-def delete_invisible_objects() -> None:
-    """Deletes all invisible objects in the scene.
-
-    Returns:
-        None
-    """
-    bpy.ops.object.select_all(action="DESELECT")
-    for obj in scene.objects:
-        if obj.hide_viewport or obj.hide_render:
-            obj.hide_viewport = False
-            obj.hide_render = False
-            obj.hide_select = False
-            obj.select_set(True)
-    bpy.ops.object.delete()
-
-    # Delete invisible collections
-    invisible_collections = [col for col in bpy.data.collections if col.hide_viewport]
-    for col in invisible_collections:
-        bpy.data.collections.remove(col)
-
-
-def normalize_scene() -> None:
+def normalize_scene() -> bpy.types.Object:
     """Normalizes the scene by scaling and translating it to fit in a unit cube centered
     at the origin.
 
@@ -448,16 +324,6 @@ def normalize_scene() -> None:
     Returns:
         None
     """
-    if len(list(get_scene_root_objects())) > 1:
-        # create an empty object to be used as a parent for all root objects
-        parent_empty = bpy.data.objects.new("ParentEmpty", None)
-        bpy.context.scene.collection.objects.link(parent_empty)
-
-        # parent all root objects to the empty object
-        for obj in get_scene_root_objects():
-            if obj != parent_empty:
-                obj.parent = parent_empty
-
     bbox_min, bbox_max = scene_bbox()
     scale = 1 / max(bbox_max - bbox_min)
     for obj in get_scene_root_objects():
@@ -469,10 +335,109 @@ def normalize_scene() -> None:
     offset = -(bbox_min + bbox_max) / 2
     for obj in get_scene_root_objects():
         obj.matrix_world.translation += offset
+
+    # bpy.context.scene.cursor.location = Vector()
+    # bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+
     bpy.ops.object.select_all(action="DESELECT")
 
-    # unparent the camera
-    bpy.data.objects["Camera"].parent = None
+    # create an empty object to be used as a parent for all root objects
+    parent_empty = bpy.data.objects.new("ParentEmpty", None)
+    scene.collection.objects.link(parent_empty)
+
+    # parent all root objects to the empty object
+    for obj in get_scene_root_objects():
+        if obj != parent_empty:
+            obj.parent = parent_empty
+
+    return parent_empty
+
+
+def _create_light(
+    name: str,
+    light_type: Literal["POINT", "SUN", "SPOT", "AREA"],
+    location: Tuple[float, float, float],
+    rotation: Tuple[float, float, float],
+    energy: float,
+    use_shadow: bool = False,
+    specular_factor: float = 1.0,
+):
+    """Creates a light object.
+
+    Args:
+        name (str): Name of the light object.
+        light_type (Literal["POINT", "SUN", "SPOT", "AREA"]): Type of the light.
+        location (Tuple[float, float, float]): Location of the light.
+        rotation (Tuple[float, float, float]): Rotation of the light.
+        energy (float): Energy of the light.
+        use_shadow (bool, optional): Whether to use shadows. Defaults to False.
+        specular_factor (float, optional): Specular factor of the light. Defaults to 1.0.
+
+    Returns:
+        bpy.types.Object: The light object.
+    """
+
+    light_data = bpy.data.lights.new(name=name, type=light_type)
+    light_object = bpy.data.objects.new(name, light_data)
+    bpy.context.collection.objects.link(light_object)
+    light_object.location = location
+    light_object.rotation_euler = rotation
+    light_data.use_shadow = use_shadow
+    light_data.specular_factor = specular_factor
+    light_data.energy = energy
+    return light_object
+
+
+def randomize_lighting() -> Dict[str, bpy.types.Object]:
+    """Randomizes the lighting in the scene.
+
+    Returns:
+        Dict[str, bpy.types.Object]: Dictionary of the lights in the scene. The keys are
+            "key_light", "fill_light", "rim_light", and "bottom_light".
+    """
+
+    # Create key light
+    key_light = _create_light(
+        name="Key_Light",
+        light_type="SUN",
+        location=(0, 0, 0),
+        rotation=(0.785398, 0, -0.785398),
+        energy=random.choice([3, 4, 5]),
+    )
+
+    # Create fill light
+    fill_light = _create_light(
+        name="Fill_Light",
+        light_type="SUN",
+        location=(0, 0, 0),
+        rotation=(0.785398, 0, 2.35619),
+        energy=random.choice([2, 3, 4]),
+    )
+
+    # Create rim light
+    rim_light = _create_light(
+        name="Rim_Light",
+        light_type="SUN",
+        location=(0, 0, 0),
+        rotation=(-0.785398, 0, -3.92699),
+        energy=random.choice([3, 4, 5]),
+    )
+
+    # Create bottom light
+    bottom_light = _create_light(
+        name="Bottom_Light",
+        light_type="SUN",
+        location=(0, 0, 0),
+        rotation=(3.14159, 0, 0),
+        energy=random.choice([1, 2, 3]),
+    )
+
+    return dict(
+        key_light=key_light,
+        fill_light=fill_light,
+        rim_light=rim_light,
+        bottom_light=bottom_light,
+    )
 
 
 def delete_missing_textures() -> Dict[str, Any]:
@@ -566,10 +531,40 @@ def apply_single_random_color_to_all_objects() -> Tuple[float, float, float, flo
         objects.
     """
     rand_color = _get_random_color()
-    for obj in bpy.context.scene.objects:
+    for obj in scene.objects:
         if obj.type == "MESH":
             _apply_color_to_object(obj, rand_color)
     return rand_color
+
+
+def get_3x4_RT_matrix_from_blender(cam: bpy.types.Object) -> Matrix:
+    """Returns the 3x4 RT matrix from the given camera.
+
+    Taken from Zero123, which in turn was taken from
+    https://github.com/panmari/stanford-shapenet-renderer/blob/master/render_blender.py
+
+    Args:
+        cam (bpy.types.Object): The camera object.
+
+    Returns:
+        Matrix: The 3x4 RT matrix from the given camera.
+    """
+    # Use matrix_world instead to account for all constraints
+    location, rotation = cam.matrix_world.decompose()[0:2]
+    R_world2bcam = rotation.to_matrix().transposed()
+
+    # Use location from matrix_world to account for constraints:
+    T_world2bcam = -1 * R_world2bcam @ location
+
+    # put into 3x4 matrix
+    RT = Matrix(
+        (
+            R_world2bcam[0][:] + (T_world2bcam[0],),
+            R_world2bcam[1][:] + (T_world2bcam[1],),
+            R_world2bcam[2][:] + (T_world2bcam[2],),
+        )
+    )
+    return RT
 
 
 class MetadataExtractor:
@@ -756,25 +751,11 @@ def render_object(
 
     # load the object
     if object_file.endswith(".blend"):
-        bpy.ops.object.mode_set(mode="OBJECT")
-        reset_cameras()
-        delete_invisible_objects()
-    else:
-        reset_scene()
-        load_object(object_file)
+        pass
 
-    # Set up cameras
-    cam = scene.objects["Camera"]
-    cam.data.lens = 35
-    cam.data.sensor_width = 32
-
-    # Set up camera constraints
-    cam_constraint = cam.constraints.new(type="TRACK_TO")
-    cam_constraint.track_axis = "TRACK_NEGATIVE_Z"
-    cam_constraint.up_axis = "UP_Y"
-    empty = bpy.data.objects.new("Empty", None)
-    scene.collection.objects.link(empty)
-    cam_constraint.target = empty
+    reset_scene_preload()
+    load_object(object_file)
+    reset_scene_post_load()
 
     # Extract the metadata. This must be done before normalizing the scene to get
     # accurate bounding box information.
@@ -793,7 +774,7 @@ def render_object(
 
     # possibly apply a random color to all objects
     if object_file.endswith(".stl") or object_file.endswith(".ply"):
-        assert len(bpy.context.selected_objects) == 1
+        assert len(context.selected_objects) == 1
         rand_color = apply_single_random_color_to_all_objects()
         metadata["random_color"] = rand_color
     else:
@@ -806,7 +787,14 @@ def render_object(
         json.dump(metadata, f, sort_keys=True, indent=2)
 
     # normalize the scene
-    normalize_scene()
+    parent_empty = normalize_scene()
+
+    # Set up camera
+    camera = create_default_camera()
+    camera.data.lens = 35
+    camera.data.sensor_width = 32
+    trackTo = camera.constraints.new('TRACK_TO')
+    trackTo.target = parent_empty
 
     # randomize the lighting
     randomize_lighting()
