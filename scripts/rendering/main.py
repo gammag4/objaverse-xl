@@ -145,13 +145,14 @@ def handle_found_object(
             command = f"export DISPLAY=:0.{gpu_i} && {command}"
 
         # render the object (put in dev null)
-        subprocess.run(
+        out = subprocess.run(
             ["bash", "-c", command],
             timeout=render_timeout,
             check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            capture_output=True
         )
+        # print(out.stdout)
+        # print(out.stderr)
 
         # check that the renders were saved successfully
         jpg_files = glob.glob(os.path.join(target_directory, "*.jpg"))
