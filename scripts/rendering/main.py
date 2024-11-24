@@ -185,22 +185,27 @@ def handle_found_object(
         with open(metadata_path, "w", encoding="utf-8") as f:
             json.dump(metadata_file, f, indent=2, sort_keys=True)
 
-        # Make a zip of the target_directory.
-        # Keeps the {save_uid} directory structure when unzipped
-        with zipfile.ZipFile(
-            f"{target_directory}.zip", "w", zipfile.ZIP_DEFLATED
-        ) as ziph:
-            zipdir(target_directory, ziph)
-
-        # move the zip to the render_dir
         fs, path = fsspec.core.url_to_fs(render_dir)
+        render_path = os.path.join(path, "renders")
+        fs.makedirs(render_path, exist_ok=True)
+        fs.cp(target_directory, render_path, recursive=True)
 
-        # move the zip to the render_dir
-        fs.makedirs(os.path.join(path, "renders"), exist_ok=True)
-        fs.put(
-            os.path.join(f"{target_directory}.zip"),
-            os.path.join(path, "renders", f"{save_uid}.zip"),
-        )
+        # # Make a zip of the target_directory.
+        # # Keeps the {save_uid} directory structure when unzipped
+        # with zipfile.ZipFile(
+        #     f"{target_directory}.zip", "w", zipfile.ZIP_DEFLATED
+        # ) as ziph:
+        #     zipdir(target_directory, ziph)
+
+        # # move the zip to the render_dir
+        # fs, path = fsspec.core.url_to_fs(render_dir)
+
+        # # move the zip to the render_dir
+        # fs.makedirs(os.path.join(path, "renders"), exist_ok=True)
+        # fs.put(
+        #     os.path.join(f"{target_directory}.zip"),
+        #     os.path.join(path, "renders", f"{save_uid}.zip"),
+        # )
 
         # log that this object was rendered successfully
         if successful_log_file is not None:
